@@ -17,6 +17,9 @@ BLUE_SPACE_SHIP = pygame.image.load(os.path.join("assets", "pixel_ship_blue_smal
 # Player ship
 YELLOW_SPACE_SHIP = pygame.image.load(os.path.join("assets", "pixel_ship_yellow.png"))
 
+# Boss Ship
+BOSS_SPACE_SHIP = pygame.image.load(os.path.join("assets", "pixel_boss.png"))
+
 # Lasers
 RED_LASER = pygame.image.load(os.path.join("assets", "pixel_laser_red.png"))
 GREEN_LASER = pygame.image.load(os.path.join("assets", "pixel_laser_green.png"))
@@ -100,13 +103,18 @@ class Player(Ship):
         self.mask = pygame.mask.from_surface(self.ship_img)
         self.max_health = health
 
-    def move_lasers(self, vel, objs):
+    def move_lasers(self, vel, objs, boss=None):
         self.cooldown()
         for laser in self.lasers:
             laser.move(vel)
             if laser.off_screen(HEIGHT):
                 self.lasers.remove(laser)
             else:
+                if boss:
+                     if laser.collison(boss):
+                        boss.health -= 10
+                        if laser in self.lasers:
+                            self.lasers.remove(laser)
                 for obj in objs:
                     if laser.collison(obj):
                         objs.remove(obj)
@@ -116,7 +124,6 @@ class Player(Ship):
     def draw(self, window):
         super().draw(window)
         self.healthbar(window)
-
     
     def healthbar(self, window):
         pygame.draw.rect(window, (255,0,0), (self.x, int(self.y + self.ship_img.get_height() + 10), int(self.ship_img.get_width()), 5))
@@ -146,6 +153,26 @@ class Enemy(Ship):
             self.cool_down_counter = 1
 
 
+class Boss(Ship):
+    def __init__(self, x, y, health=100):
+        super().__init__(x, y, health)
+        self.ship_img = BOSS_SPACE_SHIP
+        self.laser_img = YELLOW_LASER
+        self.mask = pygame.mask.from_surface(self.ship_img)
+        self.max_health = health
+
+    def draw(self, window):
+        super().draw(window)
+        self.healthbar(window)
+    
+    def move(self, vel):
+        self.x += vel
+
+    def healthbar(self, window):
+        pygame.draw.rect(window, (255,0,0), (self.x, int(self.y + self.ship_img.get_height() + 10), int(self.ship_img.get_width()), 5))
+        pygame.draw.rect(window, (0,255,0), (self.x, int(self.y + self.ship_img.get_height() + 10), int(self.ship_img.get_width() * (self.health/self.max_health)), 5))
+
+
 def collide(obj1, obj2):
     offset_x = obj2.x - obj1.x
     offset_y = obj2.y - obj1.y
@@ -162,9 +189,11 @@ def main():
     lost_font = pygame.font.SysFont("comicsans", 50) # Choose font
 
     enemies = []
+    boss = None
     wave_length = 5
     enemy_velocity = 1
     laser_velocity = 5
+    boss_velocity = 5
 
     player = Player(300, 630)
 
@@ -185,6 +214,9 @@ def main():
         for enemy in enemies:
             enemy.draw(WIN)
         
+        if boss:
+            boss.draw(WIN)
+
         player.draw(WIN)
 
         if lost:
@@ -197,6 +229,10 @@ def main():
         clock.tick(FPS)
         redraw_window()
 
+        if player.health <= 0:
+            lives -= 1
+            player.health = player.max_health
+
         if lives <= 0 or player.health <= 0:
             lost = True
             lost_count += 1
@@ -206,8 +242,12 @@ def main():
                 run = False
             else:
                 continue
+            
+        if boss:
+            if boss.health <= 0:
+                boss = None
 
-        if len(enemies) == 0:
+        if len(enemies) == 0 and boss == None:
             if player.health < 90:
                 player.health += 10
             level += 1
@@ -215,6 +255,10 @@ def main():
             for i in range(wave_length):
                 enemy = Enemy(random.randrange(50, WIDTH-100), random.randrange(-1500, -100), random.choice(["red", "blue", "green"]))
                 enemies.append(enemy)
+
+            if level % 2 == 0:
+                boss = Boss(int(WIDTH/2 - BOSS_SPACE_SHIP.get_width()/2), 30, health=50*level)
+
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -247,7 +291,17 @@ def main():
                 lives -= 1
                 enemies.remove(enemy)
 
-        player.move_lasers(-laser_velocity, enemies)
+        if boss:
+            if boss_velocity > 0 and (boss.x + boss_velocity + boss.get_width() > WIDTH):
+                boss_velocity = -boss_velocity
+            if boss_velocity < 0 and ((boss.x + boss_velocity < 0)):
+                boss_velocity = abs(boss_velocity)
+            
+            boss.move(boss_velocity)
+            boss.move_lasers(laser_velocity, player)
+            boss.shoot()
+
+        player.move_lasers(-laser_velocity, enemies, boss)
         
 
 def main_menu():
