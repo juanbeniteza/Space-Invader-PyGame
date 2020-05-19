@@ -1,0 +1,1 @@
+WIDTH, HEIGHT = 750, 750
